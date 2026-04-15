@@ -17,12 +17,18 @@
   
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Recharts (그래프 라이브러리) 및 종속성 고정 -->
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.1.12/umd/Recharts.js"></script>
 </head>
 <body class="bg-gray-50 font-sans text-gray-900 pb-20 md:pb-10">
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useMemo } = React;
+    const { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = window.Recharts;
 
     // --- Lucide Icons Components (Inline SVG 렌더링 함수) ---
     const IconWrapper = ({ name, className }) => {
@@ -63,6 +69,7 @@
           else if (name === 'Plus') innerContent = `<path d="M5 12h14"/><path d="M12 5v14"/>`;
           else if (name === 'Minus') innerContent = `<path d="M5 12h14"/>`;
           else if (name === 'Trash2') innerContent = `<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>`;
+          else if (name === 'BarChart3') innerContent = `<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>`;
 
           setSvgContent(`<svg ${svgAttrs}>${innerContent}</svg>`);
         }
@@ -83,6 +90,7 @@
     const Plus = (props) => <IconWrapper name="Plus" {...props} />;
     const Minus = (props) => <IconWrapper name="Minus" {...props} />;
     const Trash2 = (props) => <IconWrapper name="Trash2" {...props} />;
+    const BarChart3 = (props) => <IconWrapper name="BarChart3" {...props} />;
 
     // --- 유틸리티 ---
     const formatCurrency = (value) => {
@@ -108,7 +116,7 @@
       return (y1 - y2) * 12 + (mo1 - mo2);
     };
 
-    // --- 초기 템플릿 (데이터가 아예 없을 때) ---
+    // --- 초기 템플릿 ---
     const defaultDummyData = {
       seoyeon: { 
         income: 3268559, 
@@ -140,13 +148,104 @@
       }
     };
 
+    const calculatePersonData = (personData) => {
+      let ccLumpSum = 0; let ccInstallment = 0;
+      if (personData.cards) {
+        personData.cards.forEach(card => {
+          ccLumpSum += (card.lumpSum || 0);
+          if (card.installments) card.installments.forEach(inst => ccInstallment += (inst.currentPayment || 0) + (inst.interest || 0));
+        });
+      } else { ccLumpSum = personData.ccLumpSum || 0; ccInstallment = personData.ccInstallment || 0; }
+
+      let loanTotal = 0; if (personData.loans) personData.loans.forEach(loan => loanTotal += (loan.currentPayment || 0) + (loan.interest || 0)); else loanTotal = personData.loan || 0;
+      let autoTransferTotal = 0; if (personData.autoTransfers) personData.autoTransfers.forEach(transfer => autoTransferTotal += (transfer.amount || 0)); else autoTransferTotal = personData.autoTransfer || 0;
+      let insuranceTotal = 0; if (personData.insurances) personData.insurances.forEach(ins => insuranceTotal += (ins.amount || 0)); else insuranceTotal = personData.insurance || 0;
+
+      const totalCc = ccInstallment + ccLumpSum;
+      const totalExpense = totalCc + loanTotal + autoTransferTotal + insuranceTotal + personData.pocketMoney;
+      const balance = personData.income - totalExpense;
+      return { ccLumpSum, ccInstallment, totalCc, loanTotal, autoTransferTotal, insuranceTotal, totalExpense, balance };
+    };
+
+    // --- UI Components (포커스 풀림 방지를 위해 메인 컴포넌트 밖으로 분리) ---
+    const CurrencyInput = ({ label, icon: Icon, value, onChange, bgClass = 'bg-white' }) => (
+      <div className="flex flex-col mb-2">
+        <label className="text-sm font-semibold text-gray-600 mb-1 flex items-center">
+          {Icon && <Icon className="w-4 h-4 mr-1 text-gray-400" />} {label}
+        </label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-bold">₩</span>
+          <input type="text" className={`w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-right font-medium text-gray-800 ${bgClass} shadow-sm`} value={new Intl.NumberFormat('ko-KR').format(value)} onChange={(e) => onChange(e.target.value)} inputMode="numeric" />
+        </div>
+      </div>
+    );
+
+    const SummaryCard = ({ title, amount, type }) => {
+      const isPositive = type === 'income' || (type === 'balance' && amount >= 0);
+      const colorClass = type === 'income' ? 'text-blue-600' : type === 'expense' ? 'text-red-500' : isPositive ? 'text-green-600' : 'text-red-600';
+      const bgClass = type === 'income' ? 'bg-blue-50' : type === 'expense' ? 'bg-red-50' : 'bg-gray-800';
+      return (
+        <div className={`${bgClass} rounded-2xl p-5 shadow-sm border ${type === 'balance' ? 'border-gray-800' : 'border-gray-100'} flex flex-col justify-center`}>
+          <span className={`text-sm font-semibold ${type === 'balance' ? 'text-gray-300' : 'text-gray-500'} mb-1`}>{title}</span>
+          <span className={`text-2xl font-bold ${type === 'balance' ? (amount >= 0 ? 'text-green-400' : 'text-red-400') : colorClass}`}>{formatCurrency(amount)}</span>
+        </div>
+      );
+    };
+
+    const ExpenseAccordion = ({ title, icon: Icon, totalAmount, themeClass, isExpanded, onToggle, children }) => {
+      return (
+        <div className={`border rounded-2xl overflow-hidden shadow-sm transition-all duration-300 ease-in-out ${isExpanded ? 'border-gray-300 shadow-md ring-1 ring-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
+          <div className={`flex justify-between items-center p-4 cursor-pointer select-none transition-colors duration-300 ${isExpanded ? 'bg-gray-50' : 'bg-white'}`} onClick={onToggle}>
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-xl ${themeClass.iconBg} ${themeClass.iconColor} transition-colors duration-300`}><Icon className="w-5 h-5" /></div>
+              <span className="font-bold text-gray-800 text-base">{title}</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="font-bold text-lg text-gray-900">{formatCurrency(totalAmount)}</span>
+              <div className={`p-1.5 rounded-full transition-all duration-300 flex items-center justify-center w-8 h-8 ${isExpanded ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                {isExpanded ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              </div>
+            </div>
+          </div>
+          <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+            <div className="overflow-hidden">
+              <div className="p-4 border-t border-gray-100 bg-white">
+                {children}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const CustomTooltip = ({ active, payload, label }) => {
+      if (active && payload && payload.length) {
+        return (
+          <div className="bg-white/95 backdrop-blur-sm p-4 border border-gray-200 shadow-xl rounded-xl">
+            <p className="font-bold text-gray-800 mb-3 pb-2 border-b border-gray-100">{label}</p>
+            <div className="space-y-1.5">
+              {payload.map((entry, index) => (
+                <div key={index} className="flex justify-between items-center space-x-6">
+                  <span style={{ color: entry.color }} className="text-sm font-semibold flex items-center">
+                    <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: entry.color }}></span>
+                    {entry.name}
+                  </span>
+                  <span className="text-sm font-bold text-gray-800">{formatCurrency(entry.value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      return null;
+    };
+
     // --- 메인 컴포넌트 ---
     function HouseholdLedger() {
       const [isLoaded, setIsLoaded] = useState(false);
       const [activeTab, setActiveTab] = useState('main');
       const [expandedSections, setExpandedSections] = useState({});
       
-      // 월별 데이터 관리를 위한 상태
       const [currentMonth, setCurrentMonth] = useState(getCurrentYearMonth());
       const [records, setRecords] = useState({});
 
@@ -157,7 +256,6 @@
         }));
       };
 
-      // 1. 초기 데이터 로드 (월별 기록이 있는지 확인하고 마이그레이션)
       useEffect(() => {
         const savedRecords = localStorage.getItem('householdRecords_v2');
         if (savedRecords) {
@@ -166,17 +264,13 @@
           return;
         }
 
-        // 기존 V1 데이터(householdData)가 있다면 V2(월별 기록)로 마이그레이션
         const savedV1 = localStorage.getItem('householdData');
         if (savedV1) {
           try {
             let parsed = JSON.parse(savedV1);
             ['seoyeon', 'sunghoon'].forEach(person => {
               if (!parsed[person].cards) {
-                parsed[person].cards = [{
-                  id: generateId(), companyName: '기본카드', lumpSum: parsed[person].ccLumpSum || 0,
-                  installments: parsed[person].ccInstallment > 0 ? [{ id: generateId(), name: '기존 할부 내역', principal: 0, currentPayment: parsed[person].ccInstallment, interest: 0, remaining: 0, round: '' }] : []
-                }];
+                parsed[person].cards = [{ id: generateId(), companyName: '기본카드', lumpSum: parsed[person].ccLumpSum || 0, installments: parsed[person].ccInstallment > 0 ? [{ id: generateId(), name: '기존 할부 내역', principal: 0, currentPayment: parsed[person].ccInstallment, interest: 0, remaining: 0, round: '' }] : [] }];
               }
               if (parsed[person].loan !== undefined && !parsed[person].loans) parsed[person].loans = parsed[person].loan > 0 ? [{ id: generateId(), name: '기존 대출', principal: 0, currentPayment: parsed[person].loan, interest: 0, remaining: 0 }] : [];
               if (parsed[person].autoTransfer !== undefined && !parsed[person].autoTransfers) parsed[person].autoTransfers = parsed[person].autoTransfer > 0 ? [{ id: generateId(), name: '기존 자동이체 총합', date: '', amount: parsed[person].autoTransfer }] : [];
@@ -185,20 +279,17 @@
             setRecords({ [getCurrentYearMonth()]: parsed });
           } catch(e) { console.error("데이터 불러오기 실패", e); }
         } else {
-           // 아예 처음 접속하는 경우
            setRecords({ [getCurrentYearMonth()]: defaultDummyData });
         }
         setIsLoaded(true);
       }, []);
 
-      // 2. 기록이 변경될 때마다 로컬 스토리지에 자동 저장
       useEffect(() => {
         if (isLoaded) {
           localStorage.setItem('householdRecords_v2', JSON.stringify(records));
         }
       }, [records, isLoaded]);
 
-      // --- 현재 보고 있는 달의 데이터 추출 및 업데이트 유틸리티 ---
       const currentData = records[currentMonth] || { 
         seoyeon: { income: 0, cards: [], loans: [], autoTransfers: [], insurances: [], pocketMoney: 0 }, 
         sunghoon: { income: 0, cards: [], loans: [], autoTransfers: [], insurances: [], pocketMoney: 0 } 
@@ -212,7 +303,6 @@
         });
       };
 
-      // --- 달 변경 핸들러 (새로운 달을 선택하면 이전 달 데이터를 복사) ---
       const handleMonthChange = (newMonth) => {
         if (!newMonth) return;
         setCurrentMonth(newMonth);
@@ -228,7 +318,6 @@
            }
            
            if (!baseMonth) {
-             // 이전 달이 없으면 가장 가까운 미래 달 복사 (단, 자동계산은 생략하고 일시불만 초기화)
              baseMonth = existingMonths[0] || currentMonth;
              const clonedData = JSON.parse(JSON.stringify(records[baseMonth] || currentData));
              ['seoyeon', 'sunghoon'].forEach(p => {
@@ -246,88 +335,54 @@
            ['seoyeon', 'sunghoon'].forEach(p => {
              if (clonedData[p] && clonedData[p].cards) {
                clonedData[p].cards.forEach(card => {
-                 card.lumpSum = 0; // 일시불 0원 초기화
-                 
+                 card.lumpSum = 0; 
                  if (card.installments) {
                    card.installments = card.installments.map(inst => {
-                     // "회차"가 "1/3" 또는 "1 / 3" 형식인지 파악
                      const roundMatch = String(inst.round || '').match(/^(\d+)\s*\/\s*(\d+)$/);
                      if (roundMatch) {
                        const cur = parseInt(roundMatch[1], 10);
                        const tot = parseInt(roundMatch[2], 10);
                        const newCur = cur + deltaMonths;
                        
-                       // 할부 회차가 총 회차를 초과하면 해당 내역 자동 삭제
                        if (newCur > tot) return null;
                        
-                       // 남은 잔액 계산: 이전 잔액 - (금회 납부금 * 경과월)
                        const payment = parseNumber(inst.currentPayment) || 0;
                        let newRemaining = (parseNumber(inst.remaining) || 0) - (payment * deltaMonths);
                        if (newRemaining < 0) newRemaining = 0;
 
-                       return {
-                         ...inst,
-                         round: `${newCur}/${tot}`,
-                         remaining: newRemaining
-                       };
+                       return { ...inst, round: `${newCur}/${tot}`, remaining: newRemaining };
                      }
                      return inst;
-                   }).filter(Boolean); // null(종료된 할부) 제거
+                   }).filter(Boolean); 
                  }
                });
              }
            });
 
-           setRecords(prev => ({
-             ...prev,
-             [newMonth]: clonedData
-           }));
+           setRecords(prev => ({ ...prev, [newMonth]: clonedData }));
         }
       };
 
-      // 입력 핸들러들
       const handleInputChange = (person, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], [field]: parseNumber(value) } }));
-
       const addCard = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: [...(prev[person].cards || []), { id: generateId(), companyName: '', lumpSum: 0, installments: [] }] } }));
       const removeCard = (person, cardId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.filter(c => c.id !== cardId) } }));
       const handleCardChange = (person, cardId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, [field]: field === 'companyName' ? value : parseNumber(value) } : c) } }));
       const addInstallment = (person, cardId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: [...(c.installments || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0, round: '' }] } : c) } }));
       const removeInstallment = (person, cardId, instId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.filter(i => i.id !== instId) } : c) } }));
       const handleInstallmentChange = (person, cardId, instId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.map(inst => inst.id === instId ? { ...inst, [field]: (field === 'name' || field === 'round') ? value : parseNumber(value) } : inst) } : c) } }));
-
       const addLoan = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: [...(prev[person].loans || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0 }] } }));
       const removeLoan = (person, loanId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.filter(l => l.id !== loanId) } }));
       const handleLoanChange = (person, loanId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.map(l => l.id === loanId ? { ...l, [field]: field === 'name' ? value : parseNumber(value) } : l) } }));
-
       const addAutoTransfer = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: [...(prev[person].autoTransfers || []), { id: generateId(), name: '', date: '', amount: 0 }] } }));
       const removeAutoTransfer = (person, transferId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.filter(t => t.id !== transferId) } }));
       const handleAutoTransferChange = (person, transferId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.map(t => t.id === transferId ? { ...t, [field]: (field === 'name' || field === 'date') ? value : parseNumber(value) } : t) } }));
-
       const addInsurance = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], insurances: [...(prev[person].insurances || []), { id: generateId(), name: '', amount: 0 }] } }));
       const removeInsurance = (person, insId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], insurances: prev[person].insurances.filter(i => i.id !== insId) } }));
       const handleInsuranceChange = (person, insId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], insurances: prev[person].insurances.map(i => i.id === insId ? { ...i, [field]: field === 'name' ? value : parseNumber(value) } : i) } }));
 
-      const calculatePerson = (personData) => {
-        let ccLumpSum = 0; let ccInstallment = 0;
-        if (personData.cards) {
-          personData.cards.forEach(card => {
-            ccLumpSum += (card.lumpSum || 0);
-            if (card.installments) card.installments.forEach(inst => ccInstallment += (inst.currentPayment || 0) + (inst.interest || 0));
-          });
-        } else { ccLumpSum = personData.ccLumpSum || 0; ccInstallment = personData.ccInstallment || 0; }
-
-        let loanTotal = 0; if (personData.loans) personData.loans.forEach(loan => loanTotal += (loan.currentPayment || 0) + (loan.interest || 0)); else loanTotal = personData.loan || 0;
-        let autoTransferTotal = 0; if (personData.autoTransfers) personData.autoTransfers.forEach(transfer => autoTransferTotal += (transfer.amount || 0)); else autoTransferTotal = personData.autoTransfer || 0;
-        let insuranceTotal = 0; if (personData.insurances) personData.insurances.forEach(ins => insuranceTotal += (ins.amount || 0)); else insuranceTotal = personData.insurance || 0;
-
-        const totalCc = ccInstallment + ccLumpSum;
-        const totalExpense = totalCc + loanTotal + autoTransferTotal + insuranceTotal + personData.pocketMoney;
-        const balance = personData.income - totalExpense;
-        return { ccLumpSum, ccInstallment, totalCc, loanTotal, autoTransferTotal, insuranceTotal, totalExpense, balance };
-      };
-
-      const seoyeonCalc = calculatePerson(currentData.seoyeon);
-      const sunghoonCalc = calculatePerson(currentData.sunghoon);
+      // 현재 달 계산
+      const seoyeonCalc = calculatePersonData(currentData.seoyeon);
+      const sunghoonCalc = calculatePersonData(currentData.sunghoon);
 
       const mainCalc = {
         income: currentData.seoyeon.income + currentData.sunghoon.income,
@@ -342,59 +397,28 @@
         balance: seoyeonCalc.balance + sunghoonCalc.balance
       };
 
-      // UI용 "N월" 숫자 추출
+      // --- 통계용 데이터 생성 ---
+      const chartData = useMemo(() => {
+        return Object.keys(records).sort().map(monthKey => {
+          const mData = records[monthKey];
+          const sCalc = calculatePersonData(mData.seoyeon);
+          const hCalc = calculatePersonData(mData.sunghoon);
+          
+          return {
+            name: monthKey,
+            displayMonth: monthKey.split('-')[1] + '월',
+            income: mData.seoyeon.income + mData.sunghoon.income,
+            expense: sCalc.totalExpense + hCalc.totalExpense,
+            cc: sCalc.totalCc + hCalc.totalCc,
+            loan: sCalc.loanTotal + hCalc.loanTotal,
+            autoTransfer: sCalc.autoTransferTotal + hCalc.autoTransferTotal,
+            insurance: sCalc.insuranceTotal + hCalc.insuranceTotal,
+            pocketMoney: mData.seoyeon.pocketMoney + mData.sunghoon.pocketMoney
+          };
+        });
+      }, [records]);
+
       const displayMonth = currentMonth ? parseInt(currentMonth.split('-')[1], 10) : '';
-
-      const CurrencyInput = ({ label, icon: Icon, value, onChange, bgClass = 'bg-white' }) => (
-        <div className="flex flex-col mb-2">
-          <label className="text-sm font-semibold text-gray-600 mb-1 flex items-center">
-            {Icon && <Icon className="w-4 h-4 mr-1 text-gray-400" />} {label}
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-bold">₩</span>
-            <input type="text" className={`w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-right font-medium text-gray-800 ${bgClass} shadow-sm`} value={new Intl.NumberFormat('ko-KR').format(value)} onChange={(e) => onChange(e.target.value)} inputMode="numeric" />
-          </div>
-        </div>
-      );
-
-      const SummaryCard = ({ title, amount, type }) => {
-        const isPositive = type === 'income' || (type === 'balance' && amount >= 0);
-        const colorClass = type === 'income' ? 'text-blue-600' : type === 'expense' ? 'text-red-500' : isPositive ? 'text-green-600' : 'text-red-600';
-        const bgClass = type === 'income' ? 'bg-blue-50' : type === 'expense' ? 'bg-red-50' : 'bg-gray-800';
-        return (
-          <div className={`${bgClass} rounded-2xl p-5 shadow-sm border ${type === 'balance' ? 'border-gray-800' : 'border-gray-100'} flex flex-col justify-center`}>
-            <span className={`text-sm font-semibold ${type === 'balance' ? 'text-gray-300' : 'text-gray-500'} mb-1`}>{title}</span>
-            <span className={`text-2xl font-bold ${type === 'balance' ? (amount >= 0 ? 'text-green-400' : 'text-red-400') : colorClass}`}>{formatCurrency(amount)}</span>
-          </div>
-        );
-      };
-
-      const ExpenseAccordion = ({ id, title, icon: Icon, totalAmount, themeClass, children }) => {
-        const isExpanded = expandedSections[id];
-        return (
-          <div className={`border rounded-2xl overflow-hidden shadow-sm transition-all duration-300 ease-in-out ${isExpanded ? 'border-gray-300 shadow-md ring-1 ring-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
-            <div className={`flex justify-between items-center p-4 cursor-pointer select-none transition-colors duration-300 ${isExpanded ? 'bg-gray-50' : 'bg-white'}`} onClick={() => toggleExpand(id)}>
-              <div className="flex items-center space-x-3">
-                <div className={`p-2 rounded-xl ${themeClass.iconBg} ${themeClass.iconColor} transition-colors duration-300`}><Icon className="w-5 h-5" /></div>
-                <span className="font-bold text-gray-800 text-base">{title}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <span className="font-bold text-lg text-gray-900">{formatCurrency(totalAmount)}</span>
-                <div className={`p-1.5 rounded-full transition-all duration-300 flex items-center justify-center w-8 h-8 ${isExpanded ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                  {isExpanded ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                </div>
-              </div>
-            </div>
-            <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-              <div className="overflow-hidden">
-                <div className="p-4 border-t border-gray-100 bg-white">
-                  {children}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      };
 
       const renderPersonView = (personName, personKey, calcData) => (
         <div className="animate-in fade-in duration-500">
@@ -413,7 +437,14 @@
               <div>
                 <h4 className="font-bold text-red-900 mb-4 flex items-center text-base px-1"><CreditCard className="w-5 h-5 mr-2 text-red-600" /> 지출 상세 (항목을 눌러 세부작성)</h4>
                 <div className="flex flex-col space-y-4">
-                  <ExpenseAccordion id={`${personKey}-cards-${currentMonth}`} title="신용카드 (일시불+할부)" icon={CreditCard} totalAmount={calcData.totalCc} themeClass={{ iconBg: 'bg-blue-100', iconColor: 'text-blue-600' }}>
+                  <ExpenseAccordion 
+                    title="신용카드 (일시불+할부)" 
+                    icon={CreditCard} 
+                    totalAmount={calcData.totalCc} 
+                    themeClass={{ iconBg: 'bg-blue-100', iconColor: 'text-blue-600' }}
+                    isExpanded={expandedSections[`${personKey}-cards-${currentMonth}`]}
+                    onToggle={() => toggleExpand(`${personKey}-cards-${currentMonth}`)}
+                  >
                     <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-blue-800 flex items-center text-sm"><CreditCard className="w-4 h-4 mr-1.5" /> 신용카드 상세 목록</h5>
@@ -463,7 +494,14 @@
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-loans-${currentMonth}`} title="대출 납부금" icon={Landmark} totalAmount={calcData.loanTotal} themeClass={{ iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' }}>
+                  <ExpenseAccordion 
+                    title="대출 납부금" 
+                    icon={Landmark} 
+                    totalAmount={calcData.loanTotal} 
+                    themeClass={{ iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' }}
+                    isExpanded={expandedSections[`${personKey}-loans-${currentMonth}`]}
+                    onToggle={() => toggleExpand(`${personKey}-loans-${currentMonth}`)}
+                  >
                     <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-indigo-800 flex items-center text-sm"><Landmark className="w-4 h-4 mr-1.5" /> 대출 상세 목록</h5>
@@ -487,7 +525,14 @@
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-auto-${currentMonth}`} title="자동이체" icon={RefreshCw} totalAmount={calcData.autoTransferTotal} themeClass={{ iconBg: 'bg-teal-100', iconColor: 'text-teal-600' }}>
+                  <ExpenseAccordion 
+                    title="자동이체" 
+                    icon={RefreshCw} 
+                    totalAmount={calcData.autoTransferTotal} 
+                    themeClass={{ iconBg: 'bg-teal-100', iconColor: 'text-teal-600' }}
+                    isExpanded={expandedSections[`${personKey}-auto-${currentMonth}`]}
+                    onToggle={() => toggleExpand(`${personKey}-auto-${currentMonth}`)}
+                  >
                     <div className="bg-teal-50/50 p-4 rounded-xl border border-teal-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-teal-800 flex items-center text-sm"><RefreshCw className="w-4 h-4 mr-1.5" /> 자동이체 상세 목록</h5>
@@ -509,7 +554,14 @@
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-insurance-${currentMonth}`} title="보험금" icon={Shield} totalAmount={calcData.insuranceTotal} themeClass={{ iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' }}>
+                  <ExpenseAccordion 
+                    title="보험금" 
+                    icon={Shield} 
+                    totalAmount={calcData.insuranceTotal} 
+                    themeClass={{ iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' }}
+                    isExpanded={expandedSections[`${personKey}-insurance-${currentMonth}`]}
+                    onToggle={() => toggleExpand(`${personKey}-insurance-${currentMonth}`)}
+                  >
                     <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-emerald-800 flex items-center text-sm"><Shield className="w-4 h-4 mr-1.5" /> 보험금 상세 목록</h5>
@@ -530,7 +582,14 @@
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-pocket-${currentMonth}`} title="용돈" icon={PiggyBank} totalAmount={currentData[personKey].pocketMoney} themeClass={{ iconBg: 'bg-orange-100', iconColor: 'text-orange-600' }}>
+                  <ExpenseAccordion 
+                    title="용돈" 
+                    icon={PiggyBank} 
+                    totalAmount={currentData[personKey].pocketMoney} 
+                    themeClass={{ iconBg: 'bg-orange-100', iconColor: 'text-orange-600' }}
+                    isExpanded={expandedSections[`${personKey}-pocket-${currentMonth}`]}
+                    onToggle={() => toggleExpand(`${personKey}-pocket-${currentMonth}`)}
+                  >
                      <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
                         <CurrencyInput label="이번 달 용돈 금액 입력" icon={PiggyBank} value={currentData[personKey].pocketMoney} onChange={(v) => handleInputChange(personKey, 'pocketMoney', v)} bgClass="bg-white" />
                      </div>
@@ -542,7 +601,7 @@
         </div>
       );
 
-      // 데이터가 완전히 로드되기 전 렌더링 방지 (오류 방지)
+      // 데이터 로드 전 표시
       if (!isLoaded) return <div className="min-h-screen flex items-center justify-center text-gray-500">데이터를 불러오는 중입니다...</div>;
 
       return (
@@ -553,8 +612,6 @@
                 <span className="bg-blue-600 text-white p-1.5 rounded-lg mr-2"><Calculator className="w-5 h-5" /></span>
                 부부 지출 현황
               </h1>
-              
-              {/* 상단 월 선택기(Month Picker) 추가됨 */}
               <div className="flex items-center space-x-2">
                 <input 
                   type="month" 
@@ -564,10 +621,12 @@
                 />
               </div>
             </div>
+            
+            {/* 탭 메뉴에 "통계 (그래프)" 추가 */}
             <div className="max-w-4xl mx-auto px-4 flex space-x-1 overflow-x-auto">
-              {['main', 'seoyeon', 'sunghoon'].map((tab) => (
+              {['main', 'seoyeon', 'sunghoon', 'statistics'].map((tab) => (
                 <button key={tab} onClick={() => setActiveTab(tab)} className={`py-3 px-5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
-                  {tab === 'main' ? 'MAIN (통합)' : tab === 'seoyeon' ? '서연 님' : '성훈 님'}
+                  {tab === 'main' ? 'MAIN (통합)' : tab === 'seoyeon' ? '서연 님' : tab === 'sunghoon' ? '성훈 님' : '통계 (그래프)'}
                 </button>
               ))}
             </div>
@@ -625,6 +684,63 @@
 
             {activeTab === 'seoyeon' && renderPersonView('서연', 'seoyeon', seoyeonCalc)}
             {activeTab === 'sunghoon' && renderPersonView('성훈', 'sunghoon', sunghoonCalc)}
+
+            {/* 새로운 "통계" 뷰 */}
+            {activeTab === 'statistics' && (
+              <div className="animate-in fade-in duration-500">
+                {/* 수입/지출 비교 라인 차트 */}
+                <div className="bg-white rounded-2xl p-4 md:p-8 shadow-sm border border-gray-100 mb-6">
+                  <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center border-b pb-3">
+                     <BarChart3 className="w-5 h-5 mr-2 text-blue-500" /> 월별 수입 및 지출 추이
+                  </h3>
+                  <div className="h-72 w-full">
+                     {chartData.length > 0 ? (
+                       <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                             <XAxis dataKey="displayMonth" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} dy={10} />
+                             <YAxis axisLine={false} tickLine={false} tick={{fill: '#9ca3af', fontSize: 12}} tickFormatter={(val) => Math.round(val / 10000) + '만'} />
+                             <Tooltip content={<CustomTooltip />} />
+                             <Legend wrapperStyle={{ fontSize: '13px', paddingTop: '20px' }} iconType="circle" />
+                             <Line type="monotone" dataKey="income" name="총 수입" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 6, strokeWidth: 0}} />
+                             <Line type="monotone" dataKey="expense" name="총 지출" stroke="#ef4444" strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 6, strokeWidth: 0}} />
+                          </LineChart>
+                       </ResponsiveContainer>
+                     ) : (
+                       <div className="flex h-full items-center justify-center text-gray-400 text-sm">기록된 데이터가 없습니다.</div>
+                     )}
+                  </div>
+                </div>
+
+                {/* 분야별 지출 상세 누적 막대 차트 */}
+                <div className="bg-white rounded-2xl p-4 md:p-8 shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center border-b pb-3">
+                     <BarChart3 className="w-5 h-5 mr-2 text-indigo-500" /> 분야별 지출 상세 추이
+                  </h3>
+                  <div className="h-80 w-full">
+                     {chartData.length > 0 ? (
+                       <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                             <XAxis dataKey="displayMonth" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} dy={10} />
+                             <YAxis axisLine={false} tickLine={false} tick={{fill: '#9ca3af', fontSize: 12}} tickFormatter={(val) => Math.round(val / 10000) + '만'} />
+                             <Tooltip content={<CustomTooltip />} cursor={{fill: '#f3f4f6'}} />
+                             <Legend wrapperStyle={{ fontSize: '13px', paddingTop: '20px' }} iconType="circle" />
+                             
+                             <Bar dataKey="cc" name="신용카드" stackId="a" fill="#3b82f6" />
+                             <Bar dataKey="loan" name="대출금" stackId="a" fill="#6366f1" />
+                             <Bar dataKey="autoTransfer" name="자동이체" stackId="a" fill="#14b8a6" />
+                             <Bar dataKey="insurance" name="보험금" stackId="a" fill="#10b981" />
+                             <Bar dataKey="pocketMoney" name="용돈" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                       </ResponsiveContainer>
+                     ) : (
+                       <div className="flex h-full items-center justify-center text-gray-400 text-sm">기록된 데이터가 없습니다.</div>
+                     )}
+                  </div>
+                </div>
+              </div>
+            )}
           </main>
         </div>
       );
