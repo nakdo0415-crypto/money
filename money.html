@@ -139,8 +139,8 @@
           { id: generateId(), companyName: '삼성', lumpSum: 234225, installments: [{ id: generateId(), name: '주식회사 놀유니버스', principal: 204000, currentPayment: 68000, interest: 0, remaining: 136000, round: '1/3' }] }
         ],
         loans: [
-          { id: generateId(), name: '마이너스 통장', principal: 25000000, currentPayment: 60820, interest: 0, remaining: 24995033 },
-          { id: generateId(), name: '신용대출', principal: 40000000, currentPayment: 1170159, interest: 0, remaining: 12222221 }
+          { id: generateId(), name: '마이너스 통장', principal: 25000000, currentPayment: 60820, interest: 0, remaining: 24995033, isMinusAccount: true },
+          { id: generateId(), name: '신용대출', principal: 40000000, currentPayment: 1170159, interest: 0, remaining: 12222221, isMinusAccount: false }
         ],
         autoTransfers: [{ id: generateId(), name: '기본 자동이체', date: '', amount: 102560 }],
         insurances: [{ id: generateId(), name: '기본 보험', amount: 305596 }],
@@ -167,7 +167,7 @@
       return { ccLumpSum, ccInstallment, totalCc, loanTotal, autoTransferTotal, insuranceTotal, totalExpense, balance };
     };
 
-    // --- UI Components (포커스 풀림 방지를 위해 메인 컴포넌트 밖으로 분리) ---
+    // --- UI Components ---
     const CurrencyInput = ({ label, icon: Icon, value, onChange, bgClass = 'bg-white' }) => (
       <div className="flex flex-col mb-2">
         <label className="text-sm font-semibold text-gray-600 mb-1 flex items-center">
@@ -259,7 +259,22 @@
       useEffect(() => {
         const savedRecords = localStorage.getItem('householdRecords_v2');
         if (savedRecords) {
-          setRecords(JSON.parse(savedRecords));
+          let parsedRecords = JSON.parse(savedRecords);
+          
+          // 기존 데이터(마이너스 통장 여부) 자동 적용 마이그레이션
+          Object.values(parsedRecords).forEach(mData => {
+              ['seoyeon', 'sunghoon'].forEach(p => {
+                  if (mData[p] && mData[p].loans) {
+                      mData[p].loans.forEach(l => {
+                          if (l.isMinusAccount === undefined) {
+                              l.isMinusAccount = l.name.includes('마이너스');
+                          }
+                      });
+                  }
+              });
+          });
+          
+          setRecords(parsedRecords);
           setIsLoaded(true);
           return;
         }
@@ -272,9 +287,15 @@
               if (!parsed[person].cards) {
                 parsed[person].cards = [{ id: generateId(), companyName: '기본카드', lumpSum: parsed[person].ccLumpSum || 0, installments: parsed[person].ccInstallment > 0 ? [{ id: generateId(), name: '기존 할부 내역', principal: 0, currentPayment: parsed[person].ccInstallment, interest: 0, remaining: 0, round: '' }] : [] }];
               }
-              if (parsed[person].loan !== undefined && !parsed[person].loans) parsed[person].loans = parsed[person].loan > 0 ? [{ id: generateId(), name: '기존 대출', principal: 0, currentPayment: parsed[person].loan, interest: 0, remaining: 0 }] : [];
+              if (parsed[person].loan !== undefined && !parsed[person].loans) parsed[person].loans = parsed[person].loan > 0 ? [{ id: generateId(), name: '기존 대출', principal: 0, currentPayment: parsed[person].loan, interest: 0, remaining: 0, isMinusAccount: false }] : [];
               if (parsed[person].autoTransfer !== undefined && !parsed[person].autoTransfers) parsed[person].autoTransfers = parsed[person].autoTransfer > 0 ? [{ id: generateId(), name: '기존 자동이체 총합', date: '', amount: parsed[person].autoTransfer }] : [];
               if (parsed[person].insurance !== undefined && !parsed[person].insurances) parsed[person].insurances = parsed[person].insurance > 0 ? [{ id: generateId(), name: '기존 보험 총합', amount: parsed[person].insurance }] : [];
+              
+              if (parsed[person].loans) {
+                 parsed[person].loans.forEach(l => {
+                     if (l.isMinusAccount === undefined) l.isMinusAccount = l.name.includes('마이너스');
+                 });
+              }
             });
             setRecords({ [getCurrentYearMonth()]: parsed });
           } catch(e) { console.error("데이터 불러오기 실패", e); }
@@ -370,9 +391,11 @@
       const addInstallment = (person, cardId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: [...(c.installments || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0, round: '' }] } : c) } }));
       const removeInstallment = (person, cardId, instId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.filter(i => i.id !== instId) } : c) } }));
       const handleInstallmentChange = (person, cardId, instId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.map(inst => inst.id === instId ? { ...inst, [field]: (field === 'name' || field === 'round') ? value : parseNumber(value) } : inst) } : c) } }));
-      const addLoan = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: [...(prev[person].loans || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0 }] } }));
+      
+      const addLoan = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: [...(prev[person].loans || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0, isMinusAccount: false }] } }));
       const removeLoan = (person, loanId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.filter(l => l.id !== loanId) } }));
-      const handleLoanChange = (person, loanId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.map(l => l.id === loanId ? { ...l, [field]: field === 'name' ? value : parseNumber(value) } : l) } }));
+      const handleLoanChange = (person, loanId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.map(l => l.id === loanId ? { ...l, [field]: (field === 'name' || field === 'isMinusAccount') ? value : parseNumber(value) } : l) } }));
+      
       const addAutoTransfer = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: [...(prev[person].autoTransfers || []), { id: generateId(), name: '', date: '', amount: 0 }] } }));
       const removeAutoTransfer = (person, transferId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.filter(t => t.id !== transferId) } }));
       const handleAutoTransferChange = (person, transferId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.map(t => t.id === transferId ? { ...t, [field]: (field === 'name' || field === 'date') ? value : parseNumber(value) } : t) } }));
@@ -510,13 +533,35 @@
                       {(currentData[personKey].loans || []).map((loan) => (
                         <div key={loan.id} className="bg-white p-3.5 rounded-lg shadow-sm border border-indigo-200 mb-3 relative group">
                           <button onClick={() => removeLoan(personKey, loan.id)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors flex items-center justify-center w-7 h-7"><Trash2 className="w-3.5 h-3.5" /></button>
-                          <div className="mb-3 pr-8"><input type="text" placeholder="대출명 (예: 신용대출)" value={loan.name} onChange={(e) => handleLoanChange(personKey, loan.id, 'name', e.target.value)} className="w-full text-sm border-b border-gray-300 py-1 bg-transparent focus:outline-none focus:border-indigo-500 font-bold text-gray-800" /></div>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-xs">
-                              <div><label className="text-gray-500 block mb-1">대출 원금</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.principal || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'principal', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
-                              <div><label className="text-indigo-600 font-bold block mb-1">금회 상환금</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.currentPayment || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'currentPayment', e.target.value)} className="w-full border border-indigo-300 bg-indigo-50 rounded p-1.5 text-right font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
-                              <div><label className="text-gray-500 block mb-1">이자</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.interest || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'interest', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right text-gray-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
-                              <div><label className="text-gray-500 block mb-1">납부후 원금</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.remaining || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'remaining', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right text-gray-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                          
+                          <div className="mb-3 flex justify-between items-center pr-8">
+                            <input type="text" placeholder="대출명 (예: 신용대출)" value={loan.name} onChange={(e) => handleLoanChange(personKey, loan.id, 'name', e.target.value)} className="flex-1 text-sm border-b border-gray-300 py-1 bg-transparent focus:outline-none focus:border-indigo-500 font-bold text-gray-800" />
+                            <label className="ml-4 flex items-center text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded cursor-pointer border border-indigo-200 hover:bg-indigo-100 transition-colors">
+                                <input type="checkbox" checked={loan.isMinusAccount || false} onChange={(e) => handleLoanChange(personKey, loan.id, 'isMinusAccount', e.target.checked)} className="mr-1.5 accent-indigo-600" />
+                                마이너스 통장
+                            </label>
                           </div>
+                          
+                          {loan.isMinusAccount ? (
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-xs">
+                                <div><label className="text-gray-500 block mb-1">대출 한도</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.principal || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'principal', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                <div><label className="text-gray-500 block mb-1">현재 대출 잔액</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.remaining || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'remaining', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                <div><label className="text-indigo-600 font-bold block mb-1">이번 달 출금 이자</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.currentPayment || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'currentPayment', e.target.value)} className="w-full border border-indigo-300 bg-indigo-50 rounded p-1.5 text-right font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                <div>
+                                   <label className="text-emerald-600 font-bold block mb-1">원금 상환액 (여유 금액)</label>
+                                   <div className="w-full border border-emerald-200 bg-emerald-50 rounded p-1.5 text-right font-bold text-emerald-700 flex items-center justify-end min-h-[30px]">
+                                      {formatCurrency((loan.principal || 0) - (loan.remaining || 0))}
+                                   </div>
+                                </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-xs">
+                                <div><label className="text-gray-500 block mb-1">대출 원금</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.principal || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'principal', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                <div><label className="text-indigo-600 font-bold block mb-1">금회 상환금</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.currentPayment || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'currentPayment', e.target.value)} className="w-full border border-indigo-300 bg-indigo-50 rounded p-1.5 text-right font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                <div><label className="text-gray-500 block mb-1">이자</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.interest || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'interest', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right text-gray-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                <div><label className="text-gray-500 block mb-1">납부후 원금</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.remaining || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'remaining', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right text-gray-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                            </div>
+                          )}
                         </div>
                       ))}
                       {(currentData[personKey].loans?.length === 0 || !currentData[personKey].loans) && <p className="text-xs text-gray-400 text-center py-2">등록된 대출 내역이 없습니다.</p>}
