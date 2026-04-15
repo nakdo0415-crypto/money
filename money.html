@@ -25,16 +25,13 @@
     const { useState, useEffect } = React;
 
     // --- Lucide Icons Components (Inline SVG 렌더링 함수) ---
-    // React에서 직접 사용할 수 있도록 간단한 래퍼 컴포넌트 생성
     const IconWrapper = ({ name, className }) => {
       const [svgContent, setSvgContent] = useState('');
 
       useEffect(() => {
-        // lucide 객체에서 아이콘 SVG 문자열 생성
         if (lucide && lucide.icons && lucide.icons[name]) {
           const iconNode = lucide.icons[name];
           
-          // SVG element를 문자열로 변환하는 간단한 함수 (속성 추출)
           const attrsToString = (attrs) => {
               return Object.entries(attrs).map(([key, value]) => `${key}="${value}"`).join(' ');
           };
@@ -50,11 +47,6 @@
 
               return `<svg ${attrsToString(mergedAttrs)}>${childrenString}</svg>`;
           };
-
-          // 내부 함수 사용이 어려워 임시 DOM 엘리먼트를 생성 후 innerHTML 추출 방식 사용
-          const tempDiv = document.createElement('div');
-          // lucide.createIcons로는 단일 아이콘 생성이 까다로우므로 직접 구현체 호출 (혹은 간단한 SVG 직접 사용)
-          // 여기서는 좀 더 안정적인 방식을 위해 SVG 태그를 직접 조합합니다.
           
           const svgAttrs = `xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${className || ''}"`;
           
@@ -105,12 +97,58 @@
 
     const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
 
+    const getCurrentYearMonth = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+
+    const getMonthDiff = (m1, m2) => {
+      const [y1, mo1] = m1.split('-').map(Number);
+      const [y2, mo2] = m2.split('-').map(Number);
+      return (y1 - y2) * 12 + (mo1 - mo2);
+    };
+
+    // --- 초기 템플릿 (데이터가 아예 없을 때) ---
+    const defaultDummyData = {
+      seoyeon: { 
+        income: 3268559, 
+        cards: [
+          { id: generateId(), companyName: '비씨', lumpSum: 1574122, installments: [{ id: generateId(), name: '자동차보험', principal: 553770, currentPayment: 46148, interest: 0, remaining: 318255, round: '6/12' }, { id: generateId(), name: '네이버(스칼렛)', principal: 198000, currentPayment: 33000, interest: 0, remaining: 33000, round: '5/6' }] }
+        ],
+        loans: [],
+        autoTransfers: [
+          { id: generateId(), name: '아파트관리비', date: '말일', amount: 400000 },
+          { id: generateId(), name: '삼남매(카카오481)', date: '말일', amount: 50000 },
+          { id: generateId(), name: '별서하우지(카뱅2465)', date: '10일', amount: 20000 },
+          { id: generateId(), name: '넷플릭스(농협)', date: '카드결제일', amount: 7900 }
+        ],
+        insurances: [{ id: generateId(), name: '기본 보험', amount: 244220 }],
+        pocketMoney: 0 
+      },
+      sunghoon: { 
+        income: 3300000, 
+        cards: [
+          { id: generateId(), companyName: '삼성', lumpSum: 234225, installments: [{ id: generateId(), name: '주식회사 놀유니버스', principal: 204000, currentPayment: 68000, interest: 0, remaining: 136000, round: '1/3' }] }
+        ],
+        loans: [
+          { id: generateId(), name: '마이너스 통장', principal: 25000000, currentPayment: 60820, interest: 0, remaining: 24995033 },
+          { id: generateId(), name: '신용대출', principal: 40000000, currentPayment: 1170159, interest: 0, remaining: 12222221 }
+        ],
+        autoTransfers: [{ id: generateId(), name: '기본 자동이체', date: '', amount: 102560 }],
+        insurances: [{ id: generateId(), name: '기본 보험', amount: 305596 }],
+        pocketMoney: 0 
+      }
+    };
+
     // --- 메인 컴포넌트 ---
     function HouseholdLedger() {
+      const [isLoaded, setIsLoaded] = useState(false);
       const [activeTab, setActiveTab] = useState('main');
-      const [month, setMonth] = useState(5);
-
       const [expandedSections, setExpandedSections] = useState({});
+      
+      // 월별 데이터 관리를 위한 상태
+      const [currentMonth, setCurrentMonth] = useState(getCurrentYearMonth());
+      const [records, setRecords] = useState({});
 
       const toggleExpand = (id) => {
         setExpandedSections(prev => ({
@@ -119,42 +157,20 @@
         }));
       };
 
-      const [data, setData] = useState({
-        seoyeon: { 
-          income: 3268559, 
-          cards: [
-            { id: generateId(), companyName: '비씨', lumpSum: 1574122, installments: [{ id: generateId(), name: '자동차보험', principal: 553770, currentPayment: 46148, interest: 0, remaining: 318255, round: '6/12' }, { id: generateId(), name: '네이버(스칼렛)', principal: 198000, currentPayment: 33000, interest: 0, remaining: 33000, round: '5/6' }] }
-          ],
-          loans: [],
-          autoTransfers: [
-            { id: generateId(), name: '아파트관리비', date: '말일', amount: 400000 },
-            { id: generateId(), name: '삼남매(카카오481)', date: '말일', amount: 50000 },
-            { id: generateId(), name: '별서하우지(카뱅2465)', date: '10일', amount: 20000 },
-            { id: generateId(), name: '넷플릭스(농협)', date: '카드결제일', amount: 7900 }
-          ],
-          insurances: [{ id: generateId(), name: '기본 보험', amount: 244220 }],
-          pocketMoney: 0 
-        },
-        sunghoon: { 
-          income: 3300000, 
-          cards: [
-            { id: generateId(), companyName: '삼성', lumpSum: 234225, installments: [{ id: generateId(), name: '주식회사 놀유니버스', principal: 204000, currentPayment: 68000, interest: 0, remaining: 136000, round: '1/3' }] }
-          ],
-          loans: [
-            { id: generateId(), name: '마이너스 통장', principal: 25000000, currentPayment: 60820, interest: 0, remaining: 24995033 },
-            { id: generateId(), name: '신용대출', principal: 40000000, currentPayment: 1170159, interest: 0, remaining: 12222221 }
-          ],
-          autoTransfers: [{ id: generateId(), name: '기본 자동이체', date: '', amount: 102560 }],
-          insurances: [{ id: generateId(), name: '기본 보험', amount: 305596 }],
-          pocketMoney: 0 
-        }
-      });
-
+      // 1. 초기 데이터 로드 (월별 기록이 있는지 확인하고 마이그레이션)
       useEffect(() => {
-        const savedData = localStorage.getItem('householdData');
-        if (savedData) {
+        const savedRecords = localStorage.getItem('householdRecords_v2');
+        if (savedRecords) {
+          setRecords(JSON.parse(savedRecords));
+          setIsLoaded(true);
+          return;
+        }
+
+        // 기존 V1 데이터(householdData)가 있다면 V2(월별 기록)로 마이그레이션
+        const savedV1 = localStorage.getItem('householdData');
+        if (savedV1) {
           try {
-            let parsed = JSON.parse(savedData);
+            let parsed = JSON.parse(savedV1);
             ['seoyeon', 'sunghoon'].forEach(person => {
               if (!parsed[person].cards) {
                 parsed[person].cards = [{
@@ -166,33 +182,130 @@
               if (parsed[person].autoTransfer !== undefined && !parsed[person].autoTransfers) parsed[person].autoTransfers = parsed[person].autoTransfer > 0 ? [{ id: generateId(), name: '기존 자동이체 총합', date: '', amount: parsed[person].autoTransfer }] : [];
               if (parsed[person].insurance !== undefined && !parsed[person].insurances) parsed[person].insurances = parsed[person].insurance > 0 ? [{ id: generateId(), name: '기존 보험 총합', amount: parsed[person].insurance }] : [];
             });
-            setData(parsed);
+            setRecords({ [getCurrentYearMonth()]: parsed });
           } catch(e) { console.error("데이터 불러오기 실패", e); }
+        } else {
+           // 아예 처음 접속하는 경우
+           setRecords({ [getCurrentYearMonth()]: defaultDummyData });
         }
+        setIsLoaded(true);
       }, []);
 
-      useEffect(() => { localStorage.setItem('householdData', JSON.stringify(data)); }, [data]);
+      // 2. 기록이 변경될 때마다 로컬 스토리지에 자동 저장
+      useEffect(() => {
+        if (isLoaded) {
+          localStorage.setItem('householdRecords_v2', JSON.stringify(records));
+        }
+      }, [records, isLoaded]);
 
-      const handleInputChange = (person, field, value) => setData(prev => ({ ...prev, [person]: { ...prev[person], [field]: parseNumber(value) } }));
+      // --- 현재 보고 있는 달의 데이터 추출 및 업데이트 유틸리티 ---
+      const currentData = records[currentMonth] || { 
+        seoyeon: { income: 0, cards: [], loans: [], autoTransfers: [], insurances: [], pocketMoney: 0 }, 
+        sunghoon: { income: 0, cards: [], loans: [], autoTransfers: [], insurances: [], pocketMoney: 0 } 
+      };
 
-      const addCard = (person) => setData(prev => ({ ...prev, [person]: { ...prev[person], cards: [...(prev[person].cards || []), { id: generateId(), companyName: '', lumpSum: 0, installments: [] }] } }));
-      const removeCard = (person, cardId) => setData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.filter(c => c.id !== cardId) } }));
-      const handleCardChange = (person, cardId, field, value) => setData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, [field]: field === 'companyName' ? value : parseNumber(value) } : c) } }));
-      const addInstallment = (person, cardId) => setData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: [...(c.installments || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0, round: '' }] } : c) } }));
-      const removeInstallment = (person, cardId, instId) => setData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.filter(i => i.id !== instId) } : c) } }));
-      const handleInstallmentChange = (person, cardId, instId, field, value) => setData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.map(inst => inst.id === instId ? { ...inst, [field]: (field === 'name' || field === 'round') ? value : parseNumber(value) } : inst) } : c) } }));
+      const updateCurrentData = (updater) => {
+        setRecords(prev => {
+          const prevData = prev[currentMonth] || defaultDummyData;
+          const newData = typeof updater === 'function' ? updater(prevData) : updater;
+          return { ...prev, [currentMonth]: newData };
+        });
+      };
 
-      const addLoan = (person) => setData(prev => ({ ...prev, [person]: { ...prev[person], loans: [...(prev[person].loans || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0 }] } }));
-      const removeLoan = (person, loanId) => setData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.filter(l => l.id !== loanId) } }));
-      const handleLoanChange = (person, loanId, field, value) => setData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.map(l => l.id === loanId ? { ...l, [field]: field === 'name' ? value : parseNumber(value) } : l) } }));
+      // --- 달 변경 핸들러 (새로운 달을 선택하면 이전 달 데이터를 복사) ---
+      const handleMonthChange = (newMonth) => {
+        if (!newMonth) return;
+        setCurrentMonth(newMonth);
+        
+        if (!records[newMonth]) {
+           const existingMonths = Object.keys(records).sort();
+           let baseMonth = null;
+           for (let i = existingMonths.length - 1; i >= 0; i--) {
+             if (existingMonths[i] < newMonth) {
+               baseMonth = existingMonths[i];
+               break;
+             }
+           }
+           
+           if (!baseMonth) {
+             // 이전 달이 없으면 가장 가까운 미래 달 복사 (단, 자동계산은 생략하고 일시불만 초기화)
+             baseMonth = existingMonths[0] || currentMonth;
+             const clonedData = JSON.parse(JSON.stringify(records[baseMonth] || currentData));
+             ['seoyeon', 'sunghoon'].forEach(p => {
+               if (clonedData[p] && clonedData[p].cards) {
+                 clonedData[p].cards.forEach(c => { c.lumpSum = 0; });
+               }
+             });
+             setRecords(prev => ({ ...prev, [newMonth]: clonedData }));
+             return;
+           }
 
-      const addAutoTransfer = (person) => setData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: [...(prev[person].autoTransfers || []), { id: generateId(), name: '', date: '', amount: 0 }] } }));
-      const removeAutoTransfer = (person, transferId) => setData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.filter(t => t.id !== transferId) } }));
-      const handleAutoTransferChange = (person, transferId, field, value) => setData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.map(t => t.id === transferId ? { ...t, [field]: (field === 'name' || field === 'date') ? value : parseNumber(value) } : t) } }));
+           const deltaMonths = getMonthDiff(newMonth, baseMonth);
+           const clonedData = JSON.parse(JSON.stringify(records[baseMonth]));
 
-      const addInsurance = (person) => setData(prev => ({ ...prev, [person]: { ...prev[person], insurances: [...(prev[person].insurances || []), { id: generateId(), name: '', amount: 0 }] } }));
-      const removeInsurance = (person, insId) => setData(prev => ({ ...prev, [person]: { ...prev[person], insurances: prev[person].insurances.filter(i => i.id !== insId) } }));
-      const handleInsuranceChange = (person, insId, field, value) => setData(prev => ({ ...prev, [person]: { ...prev[person], insurances: prev[person].insurances.map(i => i.id === insId ? { ...i, [field]: field === 'name' ? value : parseNumber(value) } : i) } }));
+           ['seoyeon', 'sunghoon'].forEach(p => {
+             if (clonedData[p] && clonedData[p].cards) {
+               clonedData[p].cards.forEach(card => {
+                 card.lumpSum = 0; // 일시불 0원 초기화
+                 
+                 if (card.installments) {
+                   card.installments = card.installments.map(inst => {
+                     // "회차"가 "1/3" 또는 "1 / 3" 형식인지 파악
+                     const roundMatch = String(inst.round || '').match(/^(\d+)\s*\/\s*(\d+)$/);
+                     if (roundMatch) {
+                       const cur = parseInt(roundMatch[1], 10);
+                       const tot = parseInt(roundMatch[2], 10);
+                       const newCur = cur + deltaMonths;
+                       
+                       // 할부 회차가 총 회차를 초과하면 해당 내역 자동 삭제
+                       if (newCur > tot) return null;
+                       
+                       // 남은 잔액 계산: 이전 잔액 - (금회 납부금 * 경과월)
+                       const payment = parseNumber(inst.currentPayment) || 0;
+                       let newRemaining = (parseNumber(inst.remaining) || 0) - (payment * deltaMonths);
+                       if (newRemaining < 0) newRemaining = 0;
+
+                       return {
+                         ...inst,
+                         round: `${newCur}/${tot}`,
+                         remaining: newRemaining
+                       };
+                     }
+                     return inst;
+                   }).filter(Boolean); // null(종료된 할부) 제거
+                 }
+               });
+             }
+           });
+
+           setRecords(prev => ({
+             ...prev,
+             [newMonth]: clonedData
+           }));
+        }
+      };
+
+      // 입력 핸들러들
+      const handleInputChange = (person, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], [field]: parseNumber(value) } }));
+
+      const addCard = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: [...(prev[person].cards || []), { id: generateId(), companyName: '', lumpSum: 0, installments: [] }] } }));
+      const removeCard = (person, cardId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.filter(c => c.id !== cardId) } }));
+      const handleCardChange = (person, cardId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, [field]: field === 'companyName' ? value : parseNumber(value) } : c) } }));
+      const addInstallment = (person, cardId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: [...(c.installments || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0, round: '' }] } : c) } }));
+      const removeInstallment = (person, cardId, instId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.filter(i => i.id !== instId) } : c) } }));
+      const handleInstallmentChange = (person, cardId, instId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], cards: prev[person].cards.map(c => c.id === cardId ? { ...c, installments: c.installments.map(inst => inst.id === instId ? { ...inst, [field]: (field === 'name' || field === 'round') ? value : parseNumber(value) } : inst) } : c) } }));
+
+      const addLoan = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: [...(prev[person].loans || []), { id: generateId(), name: '', principal: 0, currentPayment: 0, interest: 0, remaining: 0 }] } }));
+      const removeLoan = (person, loanId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.filter(l => l.id !== loanId) } }));
+      const handleLoanChange = (person, loanId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], loans: prev[person].loans.map(l => l.id === loanId ? { ...l, [field]: field === 'name' ? value : parseNumber(value) } : l) } }));
+
+      const addAutoTransfer = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: [...(prev[person].autoTransfers || []), { id: generateId(), name: '', date: '', amount: 0 }] } }));
+      const removeAutoTransfer = (person, transferId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.filter(t => t.id !== transferId) } }));
+      const handleAutoTransferChange = (person, transferId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], autoTransfers: prev[person].autoTransfers.map(t => t.id === transferId ? { ...t, [field]: (field === 'name' || field === 'date') ? value : parseNumber(value) } : t) } }));
+
+      const addInsurance = (person) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], insurances: [...(prev[person].insurances || []), { id: generateId(), name: '', amount: 0 }] } }));
+      const removeInsurance = (person, insId) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], insurances: prev[person].insurances.filter(i => i.id !== insId) } }));
+      const handleInsuranceChange = (person, insId, field, value) => updateCurrentData(prev => ({ ...prev, [person]: { ...prev[person], insurances: prev[person].insurances.map(i => i.id === insId ? { ...i, [field]: field === 'name' ? value : parseNumber(value) } : i) } }));
 
       const calculatePerson = (personData) => {
         let ccLumpSum = 0; let ccInstallment = 0;
@@ -213,21 +326,24 @@
         return { ccLumpSum, ccInstallment, totalCc, loanTotal, autoTransferTotal, insuranceTotal, totalExpense, balance };
       };
 
-      const seoyeonCalc = calculatePerson(data.seoyeon);
-      const sunghoonCalc = calculatePerson(data.sunghoon);
+      const seoyeonCalc = calculatePerson(currentData.seoyeon);
+      const sunghoonCalc = calculatePerson(currentData.sunghoon);
 
       const mainCalc = {
-        income: data.seoyeon.income + data.sunghoon.income,
+        income: currentData.seoyeon.income + currentData.sunghoon.income,
         ccInstallment: seoyeonCalc.ccInstallment + sunghoonCalc.ccInstallment,
         ccLumpSum: seoyeonCalc.ccLumpSum + sunghoonCalc.ccLumpSum,
         totalCc: seoyeonCalc.totalCc + sunghoonCalc.totalCc,
         loan: seoyeonCalc.loanTotal + sunghoonCalc.loanTotal,
         autoTransfer: seoyeonCalc.autoTransferTotal + sunghoonCalc.autoTransferTotal,
         insurance: seoyeonCalc.insuranceTotal + sunghoonCalc.insuranceTotal,
-        pocketMoney: data.seoyeon.pocketMoney + data.sunghoon.pocketMoney,
+        pocketMoney: currentData.seoyeon.pocketMoney + currentData.sunghoon.pocketMoney,
         totalExpense: seoyeonCalc.totalExpense + sunghoonCalc.totalExpense,
         balance: seoyeonCalc.balance + sunghoonCalc.balance
       };
+
+      // UI용 "N월" 숫자 추출
+      const displayMonth = currentMonth ? parseInt(currentMonth.split('-')[1], 10) : '';
 
       const CurrencyInput = ({ label, icon: Icon, value, onChange, bgClass = 'bg-white' }) => (
         <div className="flex flex-col mb-2">
@@ -283,7 +399,7 @@
       const renderPersonView = (personName, personKey, calcData) => (
         <div className="animate-in fade-in duration-500">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-            <SummaryCard title={`${month}월 급여`} amount={data[personKey].income} type="income" />
+            <SummaryCard title={`${displayMonth}월 급여`} amount={currentData[personKey].income} type="income" />
             <SummaryCard title="총 사용금액" amount={calcData.totalExpense} type="expense" />
             <div className="col-span-2 md:col-span-1"><SummaryCard title="정산 후 잔액" amount={calcData.balance} type="balance" /></div>
           </div>
@@ -292,18 +408,18 @@
             <div className="flex flex-col space-y-8">
               <div className="bg-blue-50/40 p-5 rounded-2xl border border-blue-100">
                 <h4 className="font-bold text-blue-900 mb-4 flex items-center text-base"><Wallet className="w-5 h-5 mr-2 text-blue-600" /> 수입 정보</h4>
-                <CurrencyInput label={`${month}월 총 급여`} value={data[personKey].income} onChange={(v) => handleInputChange(personKey, 'income', v)} bgClass="bg-white" />
+                <CurrencyInput label={`${displayMonth}월 총 급여`} value={currentData[personKey].income} onChange={(v) => handleInputChange(personKey, 'income', v)} bgClass="bg-white" />
               </div>
               <div>
                 <h4 className="font-bold text-red-900 mb-4 flex items-center text-base px-1"><CreditCard className="w-5 h-5 mr-2 text-red-600" /> 지출 상세 (항목을 눌러 세부작성)</h4>
                 <div className="flex flex-col space-y-4">
-                  <ExpenseAccordion id={`${personKey}-cards`} title="신용카드 (일시불+할부)" icon={CreditCard} totalAmount={calcData.totalCc} themeClass={{ iconBg: 'bg-blue-100', iconColor: 'text-blue-600' }}>
+                  <ExpenseAccordion id={`${personKey}-cards-${currentMonth}`} title="신용카드 (일시불+할부)" icon={CreditCard} totalAmount={calcData.totalCc} themeClass={{ iconBg: 'bg-blue-100', iconColor: 'text-blue-600' }}>
                     <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-blue-800 flex items-center text-sm"><CreditCard className="w-4 h-4 mr-1.5" /> 신용카드 상세 목록</h5>
                         <button onClick={() => addCard(personKey)} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium flex items-center shadow-sm hover:bg-blue-700 transition-colors"><Plus className="w-3 h-3 mr-1" /> 카드 추가</button>
                       </div>
-                      {(data[personKey].cards || []).map((card) => (
+                      {(currentData[personKey].cards || []).map((card) => (
                         <div key={card.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4 last:mb-0">
                           <div className="flex items-center space-x-2 mb-4">
                             <input type="text" placeholder="카드사명 (예: 삼성카드)" value={card.companyName} onChange={(e) => handleCardChange(personKey, card.id, 'companyName', e.target.value)} className="flex-1 border-b border-gray-300 py-1.5 focus:border-blue-500 focus:outline-none font-bold text-gray-800" />
@@ -347,13 +463,13 @@
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-loans`} title="대출 납부금" icon={Landmark} totalAmount={calcData.loanTotal} themeClass={{ iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' }}>
+                  <ExpenseAccordion id={`${personKey}-loans-${currentMonth}`} title="대출 납부금" icon={Landmark} totalAmount={calcData.loanTotal} themeClass={{ iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' }}>
                     <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-indigo-800 flex items-center text-sm"><Landmark className="w-4 h-4 mr-1.5" /> 대출 상세 목록</h5>
                         <button onClick={() => addLoan(personKey)} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-medium flex items-center shadow-sm hover:bg-indigo-700 transition-colors"><Plus className="w-3 h-3 mr-1" /> 건별 추가</button>
                       </div>
-                      {(data[personKey].loans || []).map((loan) => (
+                      {(currentData[personKey].loans || []).map((loan) => (
                         <div key={loan.id} className="bg-white p-3.5 rounded-lg shadow-sm border border-indigo-200 mb-3 relative group">
                           <button onClick={() => removeLoan(personKey, loan.id)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors flex items-center justify-center w-7 h-7"><Trash2 className="w-3.5 h-3.5" /></button>
                           <div className="mb-3 pr-8"><input type="text" placeholder="대출명 (예: 신용대출)" value={loan.name} onChange={(e) => handleLoanChange(personKey, loan.id, 'name', e.target.value)} className="w-full text-sm border-b border-gray-300 py-1 bg-transparent focus:outline-none focus:border-indigo-500 font-bold text-gray-800" /></div>
@@ -365,19 +481,19 @@
                           </div>
                         </div>
                       ))}
-                      {(data[personKey].loans?.length === 0 || !data[personKey].loans) && <p className="text-xs text-gray-400 text-center py-2">등록된 대출 내역이 없습니다.</p>}
+                      {(currentData[personKey].loans?.length === 0 || !currentData[personKey].loans) && <p className="text-xs text-gray-400 text-center py-2">등록된 대출 내역이 없습니다.</p>}
                       <div className="mt-3 bg-white p-3 rounded-lg shadow-sm border border-indigo-200 flex justify-between items-center text-sm">
                         <span className="font-bold text-gray-700">대출 상환 총합</span><span className="font-black text-indigo-700 text-base">{formatCurrency(calcData.loanTotal)}</span>
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-auto`} title="자동이체" icon={RefreshCw} totalAmount={calcData.autoTransferTotal} themeClass={{ iconBg: 'bg-teal-100', iconColor: 'text-teal-600' }}>
+                  <ExpenseAccordion id={`${personKey}-auto-${currentMonth}`} title="자동이체" icon={RefreshCw} totalAmount={calcData.autoTransferTotal} themeClass={{ iconBg: 'bg-teal-100', iconColor: 'text-teal-600' }}>
                     <div className="bg-teal-50/50 p-4 rounded-xl border border-teal-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-teal-800 flex items-center text-sm"><RefreshCw className="w-4 h-4 mr-1.5" /> 자동이체 상세 목록</h5>
                         <button onClick={() => addAutoTransfer(personKey)} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg font-medium flex items-center shadow-sm hover:bg-teal-700 transition-colors"><Plus className="w-3 h-3 mr-1" /> 항목 추가</button>
                       </div>
-                      {(data[personKey].autoTransfers || []).map((transfer) => (
+                      {(currentData[personKey].autoTransfers || []).map((transfer) => (
                         <div key={transfer.id} className="bg-white p-3 rounded-lg shadow-sm border border-teal-200 mb-2 relative flex flex-col md:flex-row md:items-center gap-3">
                           <div className="flex-1"><input type="text" placeholder="이체처 (예: 아파트관리비)" value={transfer.name} onChange={(e) => handleAutoTransferChange(personKey, transfer.id, 'name', e.target.value)} className="w-full text-sm border-b border-gray-300 py-1 bg-transparent focus:outline-none focus:border-teal-500 font-bold text-gray-800" /></div>
                           <div className="flex items-center gap-2 pr-6 md:pr-8">
@@ -387,19 +503,19 @@
                           <button onClick={() => removeAutoTransfer(personKey, transfer.id)} className="absolute top-2.5 right-2 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors md:static md:p-1 flex items-center justify-center w-7 h-7"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       ))}
-                      {(data[personKey].autoTransfers?.length === 0 || !data[personKey].autoTransfers) && <p className="text-xs text-gray-400 text-center py-2">등록된 자동이체 내역이 없습니다.</p>}
+                      {(currentData[personKey].autoTransfers?.length === 0 || !currentData[personKey].autoTransfers) && <p className="text-xs text-gray-400 text-center py-2">등록된 자동이체 내역이 없습니다.</p>}
                       <div className="mt-3 bg-white p-3 rounded-lg shadow-sm border border-teal-200 flex justify-between items-center text-sm">
                         <span className="font-bold text-gray-700">자동이체 총합</span><span className="font-black text-teal-700 text-base">{formatCurrency(calcData.autoTransferTotal)}</span>
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-insurance`} title="보험금" icon={Shield} totalAmount={calcData.insuranceTotal} themeClass={{ iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' }}>
+                  <ExpenseAccordion id={`${personKey}-insurance-${currentMonth}`} title="보험금" icon={Shield} totalAmount={calcData.insuranceTotal} themeClass={{ iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' }}>
                     <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
                       <div className="flex justify-between items-center mb-4">
                         <h5 className="font-bold text-emerald-800 flex items-center text-sm"><Shield className="w-4 h-4 mr-1.5" /> 보험금 상세 목록</h5>
                         <button onClick={() => addInsurance(personKey)} className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-medium flex items-center shadow-sm hover:bg-emerald-700 transition-colors"><Plus className="w-3 h-3 mr-1" /> 항목 추가</button>
                       </div>
-                      {(data[personKey].insurances || []).map((ins) => (
+                      {(currentData[personKey].insurances || []).map((ins) => (
                         <div key={ins.id} className="bg-white p-3 rounded-lg shadow-sm border border-emerald-200 mb-2 relative flex flex-col md:flex-row md:items-center gap-3">
                           <div className="flex-1"><input type="text" placeholder="보험명 (예: 실비보험)" value={ins.name} onChange={(e) => handleInsuranceChange(personKey, ins.id, 'name', e.target.value)} className="w-full text-sm border-b border-gray-300 py-1 bg-transparent focus:outline-none focus:border-emerald-500 font-bold text-gray-800" /></div>
                           <div className="flex items-center gap-2 pr-6 md:pr-8 md:w-40">
@@ -408,15 +524,15 @@
                           <button onClick={() => removeInsurance(personKey, ins.id)} className="absolute top-2.5 right-2 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors md:static md:p-1 flex items-center justify-center w-7 h-7"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       ))}
-                      {(data[personKey].insurances?.length === 0 || !data[personKey].insurances) && <p className="text-xs text-gray-400 text-center py-2">등록된 보험 내역이 없습니다.</p>}
+                      {(currentData[personKey].insurances?.length === 0 || !currentData[personKey].insurances) && <p className="text-xs text-gray-400 text-center py-2">등록된 보험 내역이 없습니다.</p>}
                       <div className="mt-3 bg-white p-3 rounded-lg shadow-sm border border-emerald-200 flex justify-between items-center text-sm">
                         <span className="font-bold text-gray-700">보험금 총합</span><span className="font-black text-emerald-700 text-base">{formatCurrency(calcData.insuranceTotal)}</span>
                       </div>
                     </div>
                   </ExpenseAccordion>
-                  <ExpenseAccordion id={`${personKey}-pocket`} title="용돈" icon={PiggyBank} totalAmount={data[personKey].pocketMoney} themeClass={{ iconBg: 'bg-orange-100', iconColor: 'text-orange-600' }}>
+                  <ExpenseAccordion id={`${personKey}-pocket-${currentMonth}`} title="용돈" icon={PiggyBank} totalAmount={currentData[personKey].pocketMoney} themeClass={{ iconBg: 'bg-orange-100', iconColor: 'text-orange-600' }}>
                      <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
-                        <CurrencyInput label="이번 달 용돈 금액 입력" icon={PiggyBank} value={data[personKey].pocketMoney} onChange={(v) => handleInputChange(personKey, 'pocketMoney', v)} bgClass="bg-white" />
+                        <CurrencyInput label="이번 달 용돈 금액 입력" icon={PiggyBank} value={currentData[personKey].pocketMoney} onChange={(v) => handleInputChange(personKey, 'pocketMoney', v)} bgClass="bg-white" />
                      </div>
                   </ExpenseAccordion>
                 </div>
@@ -426,6 +542,9 @@
         </div>
       );
 
+      // 데이터가 완전히 로드되기 전 렌더링 방지 (오류 방지)
+      if (!isLoaded) return <div className="min-h-screen flex items-center justify-center text-gray-500">데이터를 불러오는 중입니다...</div>;
+
       return (
         <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20 md:pb-10">
           <header className="bg-white border-b sticky top-0 z-10 shadow-sm">
@@ -434,9 +553,15 @@
                 <span className="bg-blue-600 text-white p-1.5 rounded-lg mr-2"><Calculator className="w-5 h-5" /></span>
                 부부 지출 현황
               </h1>
+              
+              {/* 상단 월 선택기(Month Picker) 추가됨 */}
               <div className="flex items-center space-x-2">
-                <input type="number" value={month} onChange={(e) => setMonth(e.target.value)} className="w-12 text-center border rounded-md p-1 font-bold focus:ring-blue-500" />
-                <span className="font-bold">월</span>
+                <input 
+                  type="month" 
+                  value={currentMonth} 
+                  onChange={(e) => handleMonthChange(e.target.value)} 
+                  className="text-center border border-gray-300 rounded-lg p-1.5 font-bold focus:ring-2 focus:ring-blue-500 outline-none text-gray-700 shadow-sm cursor-pointer" 
+                />
               </div>
             </div>
             <div className="max-w-4xl mx-auto px-4 flex space-x-1 overflow-x-auto">
@@ -453,7 +578,7 @@
               <div className="animate-in fade-in duration-500">
                 <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-6 md:p-8 text-white shadow-lg mb-6 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10"><PiggyBank className="w-32 h-32" /></div>
-                  <h2 className="text-gray-300 text-sm font-semibold mb-2">{month}월 사용금액 (성훈 & 서연)</h2>
+                  <h2 className="text-gray-300 text-sm font-semibold mb-2">{displayMonth}월 사용금액 (성훈 & 서연)</h2>
                   <p className="text-sm text-gray-400 mb-8">※ 서연/성훈 탭에 입력된 데이터가 자동으로 합산됩니다.</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div><p className="text-gray-400 text-sm mb-1">총 급여 합계</p><p className="text-3xl font-bold text-blue-300">{formatCurrency(mainCalc.income)}</p></div>
