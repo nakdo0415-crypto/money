@@ -544,11 +544,14 @@
                           
                           {loan.isMinusAccount ? (
                             <div className="grid grid-cols-2 gap-x-3 gap-y-3 text-xs">
-                                <div><label className="text-gray-500 block mb-1">대출 한도</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.principal || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'principal', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
-                                <div><label className="text-gray-500 block mb-1">현재 대출 잔액</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.remaining || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'remaining', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
-                                <div><label className="text-indigo-600 font-bold block mb-1">이번 달 출금 이자</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.currentPayment || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'currentPayment', e.target.value)} className="w-full border border-indigo-300 bg-indigo-50 rounded p-1.5 text-right font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                <div><label className="text-gray-500 block mb-1">대출 한도 (원금)</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.principal || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'principal', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                
+                                <div><label className="text-indigo-600 font-bold block mb-1">상환 가능 금액 (현재 통장 잔액)</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.remaining || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'remaining', e.target.value)} className="w-full border border-indigo-300 bg-indigo-50 rounded p-1.5 text-right font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                
+                                <div><label className="text-gray-500 block mb-1">이번 달 출금 이자</label><input type="text" value={new Intl.NumberFormat('ko-KR').format(loan.currentPayment || 0)} onChange={(e) => handleLoanChange(personKey, loan.id, 'currentPayment', e.target.value)} className="w-full border border-gray-200 rounded p-1.5 text-right text-gray-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none" inputMode="numeric" /></div>
+                                
                                 <div>
-                                   <label className="text-emerald-600 font-bold block mb-1">원금 상환액 (여유 금액)</label>
+                                   <label className="text-emerald-600 font-bold block mb-1">마이너스 대출 잔액 (실제 사용액)</label>
                                    <div className="w-full border border-emerald-200 bg-emerald-50 rounded p-1.5 text-right font-bold text-emerald-700 flex items-center justify-end min-h-[30px]">
                                       {formatCurrency((loan.principal || 0) - (loan.remaining || 0))}
                                    </div>
